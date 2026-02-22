@@ -375,6 +375,30 @@ select:focus {
   }
 }
 
+.app-footer {
+  text-align: center;
+  margin-top: -8px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.05);
+}
+
+.app-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 400;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.7;
+}
+
+.app-footer a:hover {
+  color: #78ffd6;
+  opacity: 1;
+}
+
 @media (max-width: 480px) {
   .app-container {
     padding: 32px 24px;
