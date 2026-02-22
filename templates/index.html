@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LinkLoad</title>
+    <!-- Outfit Font for Modern Aesthetic -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <div class="blob-bg"></div>
+    <div class="app-container">
+        <header>
+            <h1>LinkLoad</h1>
+            <p>Paste a link to download audio or video.</p>
+        </header>
+
+        <form id="url-form">
+            <div class="input-wrapper">
+                <input type="url" id="link-input" placeholder="https://..." required autocomplete="off">
+            </div>
+            <button type="submit" id="fetch-btn">
+                <span class="btn-text">Proceed</span>
+                <span class="spinner" id="fetch-spinner"></span>
+            </button>
+        </form>
+
+        <div id="error-message" class="error-msg hidden"></div>
+
+        <div id="result-view" class="result-view hidden">
+            <!-- Media Preview Card -->
+            <div class="media-preview">
+                <div class="thumb-container">
+                    <img id="media-thumb" src="" alt="Thumbnail">
+                    <span id="media-duration" class="duration-badge"></span>
+                </div>
+                <div class="media-details">
+                    <h3 id="media-title"></h3>
+                    <span id="media-source" class="source-tag"></span>
+                </div>
+            </div>
+
+            <!-- Configuration -->
+            <div class="config-section">
+                <div class="toggle-group">
+                    <div class="toggle-slider hidden" id="toggle-slider"></div>
+                    <div class="toggle-option active" id="btn-video" data-type="video">Video</div>
+                    <div class="toggle-option" id="btn-audio" data-type="audio">Audio</div>
+                </div>
+
+                <div class="select-wrapper">
+                    <label>Quality Format</label>
+                    <select id="quality-select">
+                        <option value="very_high">Premium / Max</option>
+                        <option value="high" selected>High (1080p)</option>
+                        <option value="medium">Standard (720p)</option>
+                        <option value="low">Basic (480p)</option>
+                    </select>
+                </div>
+            </div>
+
+            <button id="download-btn" class="download-btn">Stream Download</button>
+            <p class="streaming-note hidden" id="download-status">Processing your download...</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+
+</html>

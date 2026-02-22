@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: linkload
+    env: docker
+    region: oregon 
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: FLASK_ENV
+        value: production
