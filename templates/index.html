@@ -4,8 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>LinkLoad</title>
-    <!-- Outfit Font for Modern Aesthetic -->
+    <title>LinkLoad – Download Audio & Video</title>
+    <meta name="description"
+        content="Paste any link to instantly download audio or video in your preferred quality. Fast, simple, free.">
+    <!-- Outfit Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -13,7 +15,9 @@
 </head>
 
 <body>
+    <!-- Gradient background layer -->
     <div class="blob-bg"></div>
+
     <div class="app-container">
         <header>
             <h1>LinkLoad</h1>
@@ -33,7 +37,7 @@
         <div id="error-message" class="error-msg hidden"></div>
 
         <div id="result-view" class="result-view hidden">
-            <!-- Media Preview Card -->
+            <!-- Media Preview -->
             <div class="media-preview">
                 <div class="thumb-container">
                     <img id="media-thumb" src="" alt="Thumbnail">
@@ -54,18 +58,27 @@
                 </div>
 
                 <div class="select-wrapper">
-                    <label>Quality Format</label>
-                    <select id="quality-select">
-                        <option value="very_high">Premium / Max</option>
-                        <option value="high" selected>High (1080p)</option>
-                        <option value="medium">Standard (720p)</option>
-                        <option value="low">Basic (480p)</option>
-                    </select>
+                    <label for="quality-select">Quality Format</label>
+                    <div class="select-outer">
+                        <select id="quality-select">
+                            <option value="very_high">Premium / Max</option>
+                            <option value="high" selected>High (1080p)</option>
+                            <option value="medium">Standard (720p)</option>
+                            <option value="low">Basic (480p)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <button id="download-btn" class="download-btn">Stream Download</button>
-            <p class="streaming-note hidden" id="download-status">Processing your download...</p>
+            <button id="download-btn" class="download-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v13M12 15l-4-4M12 15l4-4" />
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+                Stream Download
+            </button>
+            <p class="streaming-note hidden" id="download-status">⏳ Processing your download…</p>
         </div>
 
         <div class="app-footer">
