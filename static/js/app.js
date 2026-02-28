@@ -19,42 +19,91 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentType = 'video';
 
-    // Toggle handling
+    // ── Custom dropdown ──────────────────────────────────────────
+    const customSelect = document.getElementById('custom-quality-select');
+    const csTrigger = document.getElementById('cs-trigger');
+    const csValueEl = document.getElementById('cs-value');
+    const csOptions = customSelect.querySelectorAll('.cs-option');
+
+    const optionSets = {
+        video: [
+            { value: 'very_high', name: 'Premium / Max', desc: 'Best available quality', badge: '4K' },
+            { value: 'high', name: 'High (1080p)', desc: 'Full HD — recommended', badge: 'HD' },
+            { value: 'medium', name: 'Standard (720p)', desc: 'Balanced quality & size', badge: 'SD' },
+            { value: 'low', name: 'Basic (480p)', desc: 'Smallest file size', badge: 'LQ' },
+        ],
+        audio: [
+            { value: 'very_high', name: 'Premium / Max', desc: '320 kbps — highest quality', badge: 'HI' },
+            { value: 'high', name: 'High (192 kbps)', desc: 'Excellent audio fidelity', badge: '192' },
+            { value: 'medium', name: 'Standard (128 kbps)', desc: 'Great everyday quality', badge: '128' },
+            { value: 'low', name: 'Basic (64 kbps)', desc: 'Smallest file size', badge: '64' },
+        ],
+    };
+
+    let selectedValue = 'high';
+
+    function updateCustomOptions(type) {
+        const set = optionSets[type];
+        csOptions.forEach((opt, i) => {
+            const data = set[i];
+            opt.dataset.value = data.value;
+            opt.querySelector('.cs-opt-badge').textContent = data.badge;
+            opt.querySelector('.cs-opt-name').textContent = data.name;
+            opt.querySelector('.cs-opt-desc').textContent = data.desc;
+            qualitySelect.options[i].text = data.name;
+            qualitySelect.options[i].value = data.value;
+        });
+        // Re-select whichever index was previously selected
+        const idx = [...csOptions].findIndex(o => o.dataset.value === selectedValue);
+        selectOption(csOptions[idx >= 0 ? idx : 1], false);
+    }
+
+    function selectOption(optEl, closeDrawer = true) {
+        csOptions.forEach(o => o.classList.remove('selected'));
+        optEl.classList.add('selected');
+        selectedValue = optEl.dataset.value;
+        qualitySelect.value = selectedValue;
+        csValueEl.textContent = optEl.querySelector('.cs-opt-name').textContent;
+        if (closeDrawer) customSelect.classList.remove('open');
+    }
+
+    csTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        customSelect.classList.toggle('open');
+    });
+
+    csOptions.forEach(opt => {
+        opt.addEventListener('click', () => selectOption(opt));
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!customSelect.contains(e.target)) customSelect.classList.remove('open');
+    });
+
+    // ── Video / Audio toggle ─────────────────────────────────────
     [btnVideo, btnAudio].forEach((btn, index) => {
         btn.addEventListener('click', () => {
             btnVideo.classList.remove('active');
             btnAudio.classList.remove('active');
             btn.classList.add('active');
 
-            // Sliding animation
             toggleSlider.classList.remove('hidden');
             toggleSlider.style.transform = `translateX(${index * 100}%)`;
 
             currentType = btn.dataset.type;
-
-            // Adjust dropdown text
-            if (currentType === 'audio') {
-                qualitySelect.options[0].text = "Premium / Max (320kbps)";
-                qualitySelect.options[1].text = "High (192kbps)";
-                qualitySelect.options[2].text = "Standard (128kbps)";
-                qualitySelect.options[3].text = "Basic (64kbps)";
-            } else {
-                qualitySelect.options[0].text = "Premium / Max";
-                qualitySelect.options[1].text = "High (1080p)";
-                qualitySelect.options[2].text = "Standard (720p)";
-                qualitySelect.options[3].text = "Basic (480p)";
-            }
+            updateCustomOptions(currentType);
         });
     });
 
-    // Initialize slider position based on active item
+    // Initialise slider
     if (btnVideo.classList.contains('active')) {
         toggleSlider.classList.remove('hidden');
-        toggleSlider.style.transform = `translateX(0%)`;
+        toggleSlider.style.transform = 'translateX(0%)';
     }
 
     let currentUrl = '';
 
+    // ── Fetch media info ─────────────────────────────────────────
     fetchForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -75,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
+                body: JSON.stringify({ url }),
             });
 
             const data = await res.json();
@@ -95,18 +144,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 durationEl.style.display = 'none';
             }
 
-            // Auto Select Option
             const isAudioPlatform = extractor.toLowerCase().includes('soundcloud');
-            if (isAudioPlatform) {
-                btnAudio.click();
-            } else {
-                btnVideo.click();
-            }
+            (isAudioPlatform ? btnAudio : btnVideo).click();
 
             resultView.classList.remove('hidden');
 
         } catch (err) {
-            errorMsg.textContent = err.message || "An unexpected error occurred.";
+            errorMsg.textContent = err.message || 'An unexpected error occurred.';
             errorMsg.classList.remove('hidden');
         } finally {
             fetchBtn.disabled = false;
@@ -115,20 +159,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    const downloadBtn = document.getElementById('download-btn');
-    downloadBtn.addEventListener('click', () => {
-        const quality = document.getElementById('quality-select').value;
-        const params = new URLSearchParams({ url: currentUrl, type: currentType, quality });
-
-        // This triggers a direct direct stream download in the browser natively
+    // ── Download ─────────────────────────────────────────────────
+    document.getElementById('download-btn').addEventListener('click', () => {
+        const params = new URLSearchParams({ url: currentUrl, type: currentType, quality: selectedValue });
         window.location.href = `/api/download?${params.toString()}`;
 
         const statusEl = document.getElementById('download-status');
         statusEl.classList.remove('hidden');
-
-        // Re-enable
-        setTimeout(() => {
-            statusEl.classList.add('hidden');
-        }, 8000);
+        setTimeout(() => statusEl.classList.add('hidden'), 8000);
     });
 });

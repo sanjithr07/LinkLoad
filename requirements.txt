@@ -1,4 +1,6 @@
 Flask==3.1.3
-yt-dlp==2026.2.21
 Werkzeug==3.1.6
 gunicorn==21.2.0
+# yt-dlp is intentionally unpinned — the Dockerfile upgrades it to latest
+# at build time so YouTube extractors never go stale.
+yt-dlp
