@@ -58,14 +58,55 @@
                 </div>
 
                 <div class="select-wrapper">
-                    <label for="quality-select">Quality Format</label>
-                    <div class="select-outer">
-                        <select id="quality-select">
-                            <option value="very_high">Premium / Max</option>
-                            <option value="high" selected>High (1080p)</option>
-                            <option value="medium">Standard (720p)</option>
-                            <option value="low">Basic (480p)</option>
-                        </select>
+                    <label>Quality Format</label>
+
+                    <!-- Native select (hidden — used for value read/write by app.js) -->
+                    <select id="quality-select">
+                        <option value="very_high">Premium / Max</option>
+                        <option value="high" selected>High (1080p)</option>
+                        <option value="medium">Standard (720p)</option>
+                        <option value="low">Basic (480p)</option>
+                    </select>
+
+                    <!-- Custom styled dropdown -->
+                    <div class="custom-select" id="custom-quality-select">
+                        <button type="button" class="cs-trigger" id="cs-trigger">
+                            <span class="cs-value" id="cs-value">High (1080p)</span>
+                            <svg class="cs-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6 9l6 6 6-6" />
+                            </svg>
+                        </button>
+                        <div class="cs-drawer" id="cs-drawer">
+                            <div class="cs-option" data-value="very_high" data-index="0">
+                                <span class="cs-opt-badge">4K</span>
+                                <div class="cs-opt-info">
+                                    <span class="cs-opt-name">Premium / Max</span>
+                                    <span class="cs-opt-desc">Best available quality</span>
+                                </div>
+                            </div>
+                            <div class="cs-option selected" data-value="high" data-index="1">
+                                <span class="cs-opt-badge">HD</span>
+                                <div class="cs-opt-info">
+                                    <span class="cs-opt-name">High (1080p)</span>
+                                    <span class="cs-opt-desc">Full HD — recommended</span>
+                                </div>
+                            </div>
+                            <div class="cs-option" data-value="medium" data-index="2">
+                                <span class="cs-opt-badge">SD</span>
+                                <div class="cs-opt-info">
+                                    <span class="cs-opt-name">Standard (720p)</span>
+                                    <span class="cs-opt-desc">Balanced quality & size</span>
+                                </div>
+                            </div>
+                            <div class="cs-option" data-value="low" data-index="3">
+                                <span class="cs-opt-badge">LQ</span>
+                                <div class="cs-opt-info">
+                                    <span class="cs-opt-name">Basic (480p)</span>
+                                    <span class="cs-opt-desc">Smallest file size</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
