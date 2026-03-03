@@ -49,114 +49,120 @@
   padding: 0;
 }
 
-/* ── Body & Background ────────────────────────────────── */
-body {
-  font-family: 'Outfit', sans-serif;
-  background-color: var(--bg-base);
-  color: var(--text-primary);
+/*
+ * iOS Safari viewport fixes
+ * ─────────────────────────────────────────────────────────
+ * The gradient background is painted on <html> so it is
+ * always full-viewport regardless of scroll or OS chrome.
+ * body uses min-height + flex-start (not center) so the card
+ * can scroll naturally when content is taller than the screen.
+ */
+html {
+  height: 100%;
+  /* Fallback for older browsers */
   min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 24px;
-  overflow-x: hidden;
-  position: relative;
+  /* iOS Safari: fill the visible area including dynamic toolbar */
+  min-height: -webkit-fill-available;
+  background-color: var(--bg-base);
 }
 
-/*
- * MULTI-LAYER GRADIENT BACKGROUND
- * ─────────────────────────────────────────────────────────
- * Layer stack (bottom → top):
- *   .blob-bg          base: 5 radial gradients, static foundation
- *   .blob-bg::before  mid:  3 gradients, slow drift animation
- *   .blob-bg::after   top:  3 gradients, faster subtle shimmer
- * Together they produce ~11 overlapping depth layers.
- */
-.blob-bg {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-
+/* ── Body ─────────────────────────────────────────────── */
+body {
+  font-family: 'Outfit', sans-serif;
+  color: var(--text-primary);
   /*
-   * KEY FIX: CSS interpolates bare `transparent` as rgba(0,0,0,0),
-   * creating a grey band at the edge of every gradient.
-   * Solution: fade to the SAME HUE at alpha=0 → rgba(4,10,7,0).
-   * Extra mid-stops smooth the luminosity curve further.
+   * Gradient is on body itself — no intermediate div, no z-index games.
+   * body::before and ::after provide the animated overlay layers.
+   * html has --bg-base as a solid fallback if CSS gradients fail.
    */
   background:
-    /* 1. Primary bloom — rich emerald, bottom-left */
     radial-gradient(ellipse 100% 90% at 8% 108%,
       #12895a 0%,
       #0b5c3c 22%,
       #083d28 42%,
       rgba(4, 10, 7, 0) 68%),
-    /* 2. Counter-light — top-right emerald */
     radial-gradient(ellipse 70% 65% at 90% -8%,
       #0d5c40 0%,
       #083520 30%,
       rgba(4, 10, 7, 0) 62%),
-    /* 3. Left-edge mid accent */
     radial-gradient(ellipse 45% 80% at 0% 50%,
       #072e1e 0%,
       rgba(4, 10, 7, 0) 58%),
-    /* 4. Bottom-right teal whisper */
     radial-gradient(ellipse 60% 50% at 95% 100%,
       #0a3d2a 0%,
       rgba(4, 10, 7, 0) 55%),
-    /* 5. Deep centre well — keeps mid dark */
     radial-gradient(ellipse 65% 55% at 50% 45%,
       rgba(4, 10, 7, 0.88) 0%,
       rgba(4, 10, 7, 0) 75%),
-    /* 6. Solid base */
     linear-gradient(160deg, #060e0a 0%, #040a07 100%);
+  background-attachment: fixed;
+  /* keeps gradient fixed while content scrolls */
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 28px 24px;
+  padding-top: max(28px, env(safe-area-inset-top));
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
 }
 
-/* ── Mid layer: slow-drifting luminous orbs ───────────── */
-.blob-bg::before {
+/* Mid animated glow layer */
+body::before {
   content: '';
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background:
-    /* Warm bloom haze from bottom-left */
     radial-gradient(ellipse 80% 70% at 18% 100%,
       rgba(20, 168, 90, 0.34) 0%,
       rgba(8, 80, 40, 0.16) 38%,
       rgba(4, 10, 7, 0) 70%),
-    /* Cool teal veil across top */
     radial-gradient(ellipse 65% 45% at 80% 2%,
       rgba(12, 150, 82, 0.22) 0%,
       rgba(5, 65, 35, 0.09) 46%,
       rgba(4, 10, 7, 0) 70%),
-    /* Right-edge teal bleed */
     radial-gradient(ellipse 42% 75% at 100% 52%,
       rgba(14, 100, 58, 0.15) 0%,
       rgba(4, 10, 7, 0) 60%);
   animation: midDrift 20s ease-in-out infinite alternate;
-  will-change: transform, opacity;
 }
 
-/* ── Top layer: shimmer highlights ───────────────────── */
-.blob-bg::after {
+/* Top shimmer layer */
+body::after {
   content: '';
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background:
-    /* Lime-green sparkle at bottom-left corner */
     radial-gradient(ellipse 38% 32% at 3% 102%,
       rgba(45, 230, 115, 0.24) 0%,
       rgba(15, 110, 55, 0.09) 42%,
       rgba(4, 10, 7, 0) 65%),
-    /* Soft teal halo at top-right */
     radial-gradient(ellipse 32% 28% at 98% 1%,
       rgba(22, 185, 105, 0.16) 0%,
       rgba(4, 10, 7, 0) 55%),
-    /* Diffuse centre lift — barely-there brightness */
     radial-gradient(ellipse 90% 60% at 50% 50%,
       rgba(12, 65, 38, 0.10) 0%,
       rgba(4, 10, 7, 0) 72%);
   animation: topShimmer 11s ease-in-out infinite alternate;
-  will-change: transform, opacity;
 }
+
+/* (blob-bg div is kept in HTML as an empty placeholder for backwards-compat
+   but carries no styles — gradient is now on body directly) */
+.blob-bg {
+  display: none;
+}
+
 
 /* Mid layer drifts slowly left→right, slight scale */
 @keyframes midDrift {
@@ -208,6 +214,9 @@ body {
 .app-container {
   width: 100%;
   max-width: 448px;
+  position: relative;
+  /* establish stacking context above body::before/::after */
+  z-index: 1;
   /*
    * Frosted glass: white tint layer on top of dark green base,
    * giving the "white frost" look while still showing the gradient.
@@ -811,17 +820,50 @@ select#quality-select {
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 480px) {
   body {
-    padding: 16px;
+    /* On small screens: align to start so the card is scrollable */
+    justify-content: flex-start;
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
   }
 
+  /* Let the card fill available width except for our padding */
   .app-container {
-    padding: 32px 20px 28px;
+    width: 100%;
+    /* On narrow screens card should not scroll off top — use auto margin */
+    margin: auto;
+    padding: 28px 18px 24px;
     border-radius: var(--radius-lg);
-    gap: 24px;
-    /* Keep glass on mobile — just soften the shadow */
+    gap: 22px;
     box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 1px 0 0 rgba(255, 255, 255, 0.16) inset,
       0 20px 48px -12px rgba(0, 0, 0, 0.65),
       0 0 60px -20px rgba(61, 255, 163, 0.06);
+  }
+}
+
+/*
+ * iOS Safari-specific fixes
+ * ─────────────────────────────────────────────────────────
+ * Targets Safari on iOS exclusively using the touch-callout
+ * feature query.
+ */
+@supports (-webkit-touch-callout: none) {
+  body {
+    /* Ensure body never clips the card on iOS scroll bounce */
+    min-height: -webkit-fill-available;
+  }
+
+  /* Lighten backdrop-filter on iOS — heavy blurs cause jank */
+  .app-container {
+    -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.06);
+    backdrop-filter: blur(28px) saturate(180%) brightness(1.06);
+  }
+
+  /* Disable pseudo-element animation on iOS — GPU layer budget is limited */
+  .blob-bg::before,
+  .blob-bg::after {
+    animation: none;
   }
 }
