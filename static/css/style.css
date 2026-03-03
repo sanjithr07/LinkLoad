@@ -95,8 +95,9 @@ body {
       rgba(4, 10, 7, 0.88) 0%,
       rgba(4, 10, 7, 0) 75%),
     linear-gradient(160deg, #060e0a 0%, #040a07 100%);
-  background-attachment: fixed;
-  /* keeps gradient fixed while content scrolls */
+  /* NOTE: background-attachment:fixed is intentionally omitted —
+     iOS Safari has a known bug where it ignores 'fixed' on body
+     and re-paints the gradient scrolling, causing visual glitches. */
   min-height: 100vh;
   min-height: -webkit-fill-available;
   min-height: 100dvh;
@@ -112,12 +113,16 @@ body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   position: relative;
+  /* Must have a non-auto height for position:absolute children (::before/::after)
+     to stretch to the full viewport. min-height alone is enough. */
 }
 
 /* Mid animated glow layer */
 body::before {
   content: '';
-  position: fixed;
+  position: absolute;
+  /* absolute, not fixed — moves with body, never jumps
+                          when iOS Safari shows/hides its address bar */
   inset: 0;
   z-index: 0;
   pointer-events: none;
@@ -133,13 +138,14 @@ body::before {
     radial-gradient(ellipse 42% 75% at 100% 52%,
       rgba(14, 100, 58, 0.15) 0%,
       rgba(4, 10, 7, 0) 60%);
-  animation: midDrift 20s ease-in-out infinite alternate;
+  animation: midBreath 18s ease-in-out infinite alternate;
 }
 
 /* Top shimmer layer */
 body::after {
   content: '';
-  position: fixed;
+  position: absolute;
+  /* same reasoning as ::before */
   inset: 0;
   z-index: 0;
   pointer-events: none;
@@ -154,7 +160,7 @@ body::after {
     radial-gradient(ellipse 90% 60% at 50% 50%,
       rgba(12, 65, 38, 0.10) 0%,
       rgba(4, 10, 7, 0) 72%);
-  animation: topShimmer 11s ease-in-out infinite alternate;
+  animation: topBreath 11s ease-in-out infinite alternate;
 }
 
 /* (blob-bg div is kept in HTML as an empty placeholder for backwards-compat
@@ -164,49 +170,37 @@ body::after {
 }
 
 
-/* Mid layer drifts slowly left→right, slight scale */
-@keyframes midDrift {
+/* Mid layer: slow opacity breathing — no translate/scale so it never shifts */
+@keyframes midBreath {
   0% {
-    opacity: 0.75;
-    transform: translateX(0) translateY(0) scale(1);
-  }
-
-  33% {
-    opacity: 0.95;
-    transform: translateX(2%) translateY(-2%) scale(1.03);
-  }
-
-  66% {
-    opacity: 0.82;
-    transform: translateX(-1%) translateY(1%) scale(1.01);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateX(3%) translateY(-1%) scale(1.05);
-  }
-}
-
-/* Top layer breathes and pulses brightness */
-@keyframes topShimmer {
-  0% {
-    opacity: 0.6;
-    transform: scale(1);
+    opacity: 0.60;
   }
 
   40% {
-    opacity: 1.0;
-    transform: scale(1.04);
+    opacity: 1.00;
   }
 
   70% {
     opacity: 0.75;
-    transform: scale(0.98);
   }
 
   100% {
-    opacity: 0.9;
-    transform: scale(1.06);
+    opacity: 0.85;
+  }
+}
+
+/* Top layer: subtler breathing */
+@keyframes topBreath {
+  0% {
+    opacity: 0.50;
+  }
+
+  50% {
+    opacity: 0.90;
+  }
+
+  100% {
+    opacity: 0.65;
   }
 }
 
@@ -820,19 +814,21 @@ select#quality-select {
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 480px) {
   body {
-    /* On small screens: align to start so the card is scrollable */
-    justify-content: flex-start;
-    padding-top: max(20px, env(safe-area-inset-top));
-    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    /*
+     * Keep justify-content: center (inherited from base).
+     * Safe-area padding ensures we never clip under the notch or home bar.
+     * The card uses margin: auto to center itself within the flex column.
+     */
+    padding-top: max(24px, env(safe-area-inset-top));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
     padding-left: max(16px, env(safe-area-inset-left));
     padding-right: max(16px, env(safe-area-inset-right));
   }
 
-  /* Let the card fill available width except for our padding */
   .app-container {
     width: 100%;
-    /* On narrow screens card should not scroll off top — use auto margin */
     margin: auto;
+    /* centers card inside the flex column */
     padding: 28px 18px 24px;
     border-radius: var(--radius-lg);
     gap: 22px;
@@ -845,25 +841,29 @@ select#quality-select {
 
 /*
  * iOS Safari-specific fixes
- * ─────────────────────────────────────────────────────────
- * Targets Safari on iOS exclusively using the touch-callout
- * feature query.
+ * `(-webkit-touch-callout: none)` matches iOS Safari exclusively.
  */
 @supports (-webkit-touch-callout: none) {
+
+  html,
   body {
-    /* Ensure body never clips the card on iOS scroll bounce */
+    /* -webkit-fill-available is the only reliable full-height on iOS */
     min-height: -webkit-fill-available;
   }
 
-  /* Lighten backdrop-filter on iOS — heavy blurs cause jank */
+  /* Lighter blur on iOS — 44px causes jank on older iPhones */
   .app-container {
     -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.06);
     backdrop-filter: blur(28px) saturate(180%) brightness(1.06);
   }
 
-  /* Disable pseudo-element animation on iOS — GPU layer budget is limited */
-  .blob-bg::before,
-  .blob-bg::after {
+  /*
+   * Disable the animated overlay layers on iOS.
+   * body::before/::after use position:fixed + animation which consumes
+   * GPU compositing budget on A-series chips, causing scroll jank.
+   */
+  body::before,
+  body::after {
     animation: none;
   }
 }
