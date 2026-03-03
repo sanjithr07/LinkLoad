@@ -5,3 +5,6 @@ ffmpeg.exe
 ffprobe.exe
 *.zip
 *.pyc
+# YouTube cookies — never commit these
+cookies.txt
+yt_cookies_*.txt

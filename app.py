@@ -1,61 +1,155 @@
+"""
+LinkLoad – Flask backend
+========================
+YouTube bot-detection bypass strategy (in priority order):
+  1. Cookies  – YT_COOKIES_B64 env var (base64-encoded cookies.txt)
+  2. PO Token – YT_PO_TOKEN + YT_VISITOR_DATA env vars
+  3. Player client chain – tv_embedded → ios → mweb → android_creator
+     (works without auth for many videos, fails on restricted/age-gated ones)
+
+Setup instructions for Render / Docker:
+  1. Export YouTube cookies from your browser using the
+     "Get cookies.txt LOCALLY" extension (select youtube.com, Netscape format).
+  2. Base64-encode the file (PowerShell):
+       [Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))
+     or on Mac/Linux:
+       base64 -w 0 cookies.txt
+  3. In Render Dashboard → Environment → Add:
+       Key:   YT_COOKIES_B64
+       Value: <paste the base64 string>
+  4. Redeploy — yt-dlp will authenticate as your account, bypassing all blocks.
+"""
+
 import os
-import subprocess
+import base64
+import tempfile
+import atexit
 import logging
+import subprocess
 from urllib.parse import quote
+
 from flask import Flask, request, jsonify, Response, stream_with_context, render_template
 import yt_dlp
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 logging.basicConfig(level=logging.INFO)
 
+# ── Cookies setup ────────────────────────────────────────────────────────────
 
-def get_ffmpeg():
-    """Return ffmpeg path — local .exe on Windows dev, system binary on Linux/Docker."""
+_cookies_file: str | None = None
+
+
+def _init_cookies() -> str | None:
+    """
+    Decode the YT_COOKIES_B64 env var and write a temp cookies.txt file.
+    Returns the path to the file, or None if the env var isn't set.
+    """
+    global _cookies_file
+    b64 = os.environ.get('YT_COOKIES_B64', '').strip()
+    if not b64:
+        return None
+    try:
+        data = base64.b64decode(b64)
+        tmp = tempfile.NamedTemporaryFile(
+            mode='wb', suffix='.txt', delete=False, prefix='yt_cookies_'
+        )
+        tmp.write(data)
+        tmp.close()
+        _cookies_file = tmp.name
+        app.logger.info('YouTube cookies loaded from YT_COOKIES_B64.')
+    except Exception as exc:
+        app.logger.warning(f'Failed to decode YT_COOKIES_B64: {exc}')
+    return _cookies_file
+
+
+def _cleanup_cookies():
+    if _cookies_file and os.path.exists(_cookies_file):
+        os.unlink(_cookies_file)
+
+
+atexit.register(_cleanup_cookies)
+_init_cookies()   # run at import time (works for both gunicorn + dev)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def get_ffmpeg() -> str:
+    """Local .exe on Windows dev, system binary on Linux/Docker."""
     local = os.path.join(app.root_path, 'ffmpeg.exe')
     return local if os.path.exists(local) else 'ffmpeg'
 
 
-# ---------------------------------------------------------------------------
-# yt-dlp base options that bypass YouTube bot-detection on server IPs.
-#
-# Why these work:
-#   - tv_embedded / ios / android_vr are non-web player clients that YouTube
-#     doesn't apply the same bot-check pipeline to.
-#   - 'web' and 'default' are flagged on datacenter IPs → removed from chain.
-#   - A real-looking User-Agent + Accept-Language stops the "sign-in" redirect.
-#   - http_chunk_size keeps large streams stable on Render/Docker.
-# ---------------------------------------------------------------------------
-YT_EXTRACTOR_ARGS = {
-    'youtube': {
-        # Priority order: tv_embedded is most permissive on server IPs,
-        # ios & android_vr as fallbacks; web_creator last resort.
-        'player_client': ['tv_embedded', 'ios', 'android_vr', 'web_creator'],
-        # Skip any format that requires a signed URL (helps avoid 403s)
-        'skip_dash_manifest': [],
+def build_ydl_opts(**overrides) -> dict:
+    """
+    Build yt-dlp options with the best available auth method.
+    Priority: cookies > PO token > unauthenticated player clients.
+    """
+    # --- Extractor args ---
+    extractor_args: dict = {
+        'youtube': {
+            # Player client fallback chain.
+            # tv_embedded and ios avoid most server-IP checks.
+            # mweb and android_creator are last-resort unauthenticated options.
+            'player_client': ['tv_embedded', 'ios', 'mweb', 'android_creator'],
+        }
     }
-}
 
-BROWSER_HEADERS = {
-    'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/122.0.0.0 Safari/537.36'
-    ),
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-}
+    # PO token (strongest un-cookied bypass, optional)
+    po_token    = os.environ.get('YT_PO_TOKEN', '').strip()
+    visitor_data = os.environ.get('YT_VISITOR_DATA', '').strip()
+    if po_token and visitor_data:
+        extractor_args['youtube']['po_token']     = [f'web+{po_token}']
+        extractor_args['youtube']['visitor_data'] = [visitor_data]
+        app.logger.debug('Using PO token for YouTube requests.')
 
-BASE_YDL_OPTS = {
-    'quiet': True,
-    'no_warnings': True,
-    'extractor_args': YT_EXTRACTOR_ARGS,
-    'http_headers': BROWSER_HEADERS,
-    # Retry network errors aggressively
-    'retries': 5,
-    'fragment_retries': 5,
-    'http_chunk_size': 10 * 1024 * 1024,  # 10 MB chunks
-}
+    opts = {
+        'quiet':            True,
+        'no_warnings':      True,
+        'extractor_args':   extractor_args,
+        'http_headers': {
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/122.0.0.0 Safari/537.36'
+            ),
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'retries':          6,
+        'fragment_retries': 6,
+        'http_chunk_size':  10 * 1024 * 1024,
+    }
 
+    # Cookies → highest-priority auth, overrides everything else
+    if _cookies_file:
+        opts['cookiefile'] = _cookies_file
+
+    opts['ffmpeg_location'] = get_ffmpeg()
+    opts.update(overrides)
+    return opts
+
+
+def friendly_error(raw: str) -> tuple[str, int]:
+    """
+    Convert raw yt-dlp error strings into user-friendly messages + HTTP codes.
+    """
+    low = raw.lower()
+    if 'sign in' in low or 'bot' in low or '403' in low:
+        return (
+            'YouTube is blocking this server. '
+            'Set the YT_COOKIES_B64 environment variable to fix this — '
+            'see the deployment guide in README.',
+            403,
+        )
+    if 'private video' in low:
+        return 'This video is private.', 403
+    if 'age' in low and 'restrict' in low:
+        return 'This video is age-restricted. Cookies from an adult account are required.', 403
+    if 'copyright' in low or 'not available' in low:
+        return 'This video is not available in the server region.', 451
+    return raw, 400
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
 def index():
@@ -64,19 +158,15 @@ def index():
 
 @app.route('/api/info', methods=['POST'])
 def get_info():
-    data = request.json
-    url = data.get('url')
+    data = request.json or {}
+    url  = data.get('url', '').strip()
     if not url:
         return jsonify({'error': 'URL is required'}), 400
 
-    ydl_opts = {
-        **BASE_YDL_OPTS,
-        'skip_download': True,
-        'ffmpeg_location': get_ffmpeg(),
-    }
+    opts = build_ydl_opts(skip_download=True)
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
         return jsonify({
@@ -85,21 +175,19 @@ def get_info():
             'duration':  info.get('duration', 0),
             'extractor': info.get('extractor_key', 'Unknown'),
         })
-    except yt_dlp.utils.DownloadError as e:
-        err = str(e)
-        app.logger.error(f"yt-dlp info error: {err}")
-        # Surface a clean message for common bot-check failures
-        if 'Sign in' in err or 'bot' in err.lower():
-            return jsonify({'error': 'YouTube is blocking this server. Try a different video or use a direct link.'}), 403
-        return jsonify({'error': err}), 400
-    except Exception as e:
-        app.logger.error(f"Info error: {e}")
-        return jsonify({'error': str(e)}), 400
+
+    except yt_dlp.utils.DownloadError as exc:
+        msg, code = friendly_error(str(exc))
+        app.logger.error(f'Info error [{code}]: {exc}')
+        return jsonify({'error': msg}), code
+    except Exception as exc:
+        app.logger.error(f'Info error: {exc}')
+        return jsonify({'error': str(exc)}), 400
 
 
 @app.route('/api/download', methods=['GET'])
 def download():
-    url        = request.args.get('url')
+    url        = request.args.get('url', '').strip()
     media_type = request.args.get('type', 'video')
     quality    = request.args.get('quality', 'high')
 
@@ -111,104 +199,72 @@ def download():
 
     # Build format selector
     if is_audio:
-        format_str = 'bestaudio[ext=m4a]/bestaudio/best'
+        fmt = 'bestaudio[ext=m4a]/bestaudio/best'
     else:
-        h = {'low': 480, 'medium': 720, 'high': 1080}.get(quality)
+        h_map = {'low': 480, 'medium': 720, 'high': 1080}
+        h = h_map.get(quality)
         if h:
-            format_str = (
+            fmt = (
                 f'bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]'
                 f'/bestvideo[height<={h}]+bestaudio'
                 f'/best[height<={h}]/best'
             )
         else:
-            format_str = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+            fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
 
-    ydl_opts = {
-        **BASE_YDL_OPTS,
-        'format': format_str,
-        'skip_download': True,
-        'ffmpeg_location': ffmpeg,
-    }
+    opts = build_ydl_opts(format=fmt, skip_download=True)
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info  = ydl.extract_info(url, download=False)
             title = info.get('title', 'download')
 
-            # Collect stream URLs (video+audio or single)
             if 'requested_formats' in info:
                 stream_urls = [f['url'] for f in info['requested_formats']]
             else:
                 stream_urls = [info['url']]
 
+        # Build ffmpeg command
         if is_audio:
-            cmd = [
-                ffmpeg, '-i', stream_urls[0],
-                '-vn', '-q:a', '2', '-f', 'mp3', 'pipe:1',
-            ]
-            filename = f"{title}.mp3"
+            cmd      = [ffmpeg, '-i', stream_urls[0], '-vn', '-q:a', '2', '-f', 'mp3', 'pipe:1']
+            filename = f'{title}.mp3'
             mimetype = 'audio/mpeg'
         else:
+            base_cmd = [ffmpeg]
             if len(stream_urls) == 2:
-                cmd = [
-                    ffmpeg,
-                    '-i', stream_urls[0],   # video
-                    '-i', stream_urls[1],   # audio
-                    '-c', 'copy',
-                    '-f', 'mp4',
-                    '-movflags', 'frag_keyframe+empty_moov',
-                    'pipe:1',
-                ]
+                base_cmd += ['-i', stream_urls[0], '-i', stream_urls[1]]
             else:
-                cmd = [
-                    ffmpeg, '-i', stream_urls[0],
-                    '-c', 'copy',
-                    '-f', 'mp4',
-                    '-movflags', 'frag_keyframe+empty_moov',
-                    'pipe:1',
-                ]
-            filename = f"{title}.mp4"
+                base_cmd += ['-i', stream_urls[0]]
+            cmd      = base_cmd + ['-c', 'copy', '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov', 'pipe:1']
+            filename = f'{title}.mp4'
             mimetype = 'video/mp4'
 
         def generate():
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-            )
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             try:
-                while True:
-                    chunk = process.stdout.read(65536)  # 64 KB chunks
-                    if not chunk:
-                        break
+                while chunk := proc.stdout.read(65536):
                     yield chunk
-            except Exception as e:
-                app.logger.error(f"Stream error: {e}")
+            except Exception as exc:
+                app.logger.error(f'Stream error: {exc}')
             finally:
-                process.stdout.close()
-                process.terminate()
-                process.wait()
+                proc.stdout.close()
+                proc.terminate()
+                proc.wait()
 
-        safe_filename = quote(filename.encode('utf-8'))
-        headers = {
-            'Content-Disposition': f"attachment; filename*=UTF-8''{safe_filename}",
-        }
-
+        safe_name = quote(filename.encode('utf-8'))
         return Response(
             stream_with_context(generate()),
             mimetype=mimetype,
-            headers=headers,
+            headers={'Content-Disposition': f"attachment; filename*=UTF-8''{safe_name}"},
         )
 
-    except yt_dlp.utils.DownloadError as e:
-        err = str(e)
-        app.logger.error(f"yt-dlp download error: {err}")
-        if 'Sign in' in err or 'bot' in err.lower():
-            return 'YouTube is blocking this server. Try a different video.', 403
-        return f'Download error: {err}', 400
-    except Exception as e:
-        app.logger.error(f"Download error: {e}")
-        return f'Error: {str(e)}', 400
+    except yt_dlp.utils.DownloadError as exc:
+        msg, code = friendly_error(str(exc))
+        app.logger.error(f'Download error [{code}]: {exc}')
+        return msg, code
+    except Exception as exc:
+        app.logger.error(f'Download error: {exc}')
+        return str(exc), 400
 
 
 if __name__ == '__main__':
