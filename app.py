@@ -117,6 +117,14 @@ def build_ydl_opts(**overrides) -> dict:
         'retries':          6,
         'fragment_retries': 6,
         'http_chunk_size':  10 * 1024 * 1024,
+        # ── Geo-restriction bypass ────────────────────────────────────────
+        # Sends X-Forwarded-For headers spoofing an IP in the target country.
+        # Set YT_GEO_BYPASS_COUNTRY to a 2-letter ISO code (e.g. IN, GB, US).
+        # Defaults to IN (India) because Render runs in Oregon, US — many
+        # Indian content creators region-lock to IN, and IN also covers a
+        # broad range of YouTube content.
+        'geo_bypass':         True,
+        'geo_bypass_country': os.environ.get('YT_GEO_BYPASS_COUNTRY', 'IN'),
     }
 
     # Cookies → highest-priority auth, overrides everything else
@@ -137,15 +145,20 @@ def friendly_error(raw: str) -> tuple[str, int]:
         return (
             'YouTube is blocking this server. '
             'Set the YT_COOKIES_B64 environment variable to fix this — '
-            'see the deployment guide in README.',
+            'see COOKIES_SETUP.md for instructions.',
             403,
         )
     if 'private video' in low:
         return 'This video is private.', 403
     if 'age' in low and 'restrict' in low:
-        return 'This video is age-restricted. Cookies from an adult account are required.', 403
-    if 'copyright' in low or 'not available' in low:
-        return 'This video is not available in the server region.', 451
+        return 'This video is age-restricted. Cookies from a signed-in account are required.', 403
+    if 'not available' in low or 'copyright' in low or 'blocked' in low:
+        return (
+            'This video is not available in the server region. '
+            'Try setting YT_GEO_BYPASS_COUNTRY to your country code (e.g. IN, GB, US) '
+            'in Render environment variables.',
+            451,
+        )
     return raw, 400
 
 
