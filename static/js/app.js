@@ -47,6 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
             { value: 'medium', name: 'Medium (720p)', desc: 'Good balance of quality/size', badge: 'SD' },
             { value: 'low', name: 'Low (480p)', desc: 'Smaller file size', badge: 'LQ' }
         ],
+        video_capped: [
+            { value: 'very_high', name: 'Max (720p)', desc: 'Platform maximum', badge: 'HD' },
+            { value: 'high', name: 'High (480p)', desc: 'Standard resolution', badge: 'SD' },
+            { value: 'medium', name: 'Medium (360p)', desc: 'Balanced quality', badge: 'LQ' },
+            { value: 'low', name: 'Low (240p)', desc: 'Smallest file size', badge: 'SQ' }
+        ],
         audio: [
             { value: 'very_high', name: 'Lossless / Max', desc: 'Highest bitrate available', badge: '320k' },
             { value: 'high', name: 'High (192kbps)', desc: 'Great audio quality', badge: '192k' },
@@ -57,7 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize Dropdown Options
     function renderDropdownOptions() {
-        const options = qualityOptions[state.type];
+        let typeKey = state.type;
+        if (typeKey === 'video' && state.isCapped) {
+            typeKey = 'video_capped';
+        }
+        const options = qualityOptions[typeKey];
         elements.dropdownMenu.innerHTML = options.map(opt => `
             <div class="dropdown-item ${opt.value === state.quality ? 'selected' : ''}" data-value="${opt.value}">
                 <div class="item-info">
@@ -152,9 +162,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Auto-fallback to audio if soundcloud
-            const isAudioOnly = (data.extractor || '').toLowerCase().includes('soundcloud');
+            const extractor = (data.extractor || '').toLowerCase();
+            const isAudioOnly = extractor.includes('soundcloud');
+            state.isCapped = extractor.includes('instagram'); // Detect Instagram cap
+
             if (isAudioOnly && state.type !== 'audio') {
                 elements.segmentBtns[1].click();
+            } else {
+                renderDropdownOptions(); // Force refresh labels for video if capped
             }
 
             // UI Flow Action: Hide form, reveal populated results and options
