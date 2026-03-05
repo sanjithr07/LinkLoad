@@ -1,171 +1,215 @@
+// LinkLoad Application Logic
 document.addEventListener('DOMContentLoaded', () => {
-    const fetchForm = document.getElementById('url-form');
-    const linkInput = document.getElementById('link-input');
-    const fetchBtn = document.getElementById('fetch-btn');
-    const fetchSpinner = document.getElementById('fetch-spinner');
-    const btnText = fetchBtn.querySelector('.btn-text');
-    const errorMsg = document.getElementById('error-message');
+    // DOM Elements
+    const elements = {
+        formContainer: document.getElementById('form-container'),
+        form: document.getElementById('url-form'),
+        input: document.getElementById('link-input'),
+        fetchBtn: document.getElementById('fetch-btn'),
+        fetchBtnText: document.querySelector('#fetch-btn .btn-text'),
+        fetchSpinner: document.getElementById('fetch-spinner'),
+        errorMsg: document.getElementById('error-message'),
 
-    const resultView = document.getElementById('result-view');
-    const thumbImg = document.getElementById('media-thumb');
-    const titleEl = document.getElementById('media-title');
-    const durationEl = document.getElementById('media-duration');
-    const sourceEl = document.getElementById('media-source');
+        resultView: document.getElementById('result-view'),
+        mediaThumb: document.getElementById('media-thumb'),
+        mediaTitle: document.getElementById('media-title'),
+        mediaDuration: document.getElementById('media-duration'),
+        mediaSource: document.getElementById('media-source'),
 
-    const btnVideo = document.getElementById('btn-video');
-    const btnAudio = document.getElementById('btn-audio');
-    const toggleSlider = document.getElementById('toggle-slider');
-    const qualitySelect = document.getElementById('quality-select');
+        optionsView: document.getElementById('options-view'),
+        segmentBtns: document.querySelectorAll('.segment-btn'),
+        segmentBg: document.getElementById('segment-active-bg'),
 
-    let currentType = 'video';
+        dropdown: document.getElementById('quality-dropdown'),
+        dropdownTrigger: document.querySelector('.dropdown-trigger'),
+        dropdownValueText: document.getElementById('dropdown-value-text'),
+        dropdownMenu: document.getElementById('dropdown-menu'),
 
-    // ── Custom dropdown ──────────────────────────────────────────
-    const customSelect = document.getElementById('custom-quality-select');
-    const csTrigger = document.getElementById('cs-trigger');
-    const csValueEl = document.getElementById('cs-value');
-    const csOptions = customSelect.querySelectorAll('.cs-option');
+        downloadBtn: document.getElementById('download-btn'),
 
-    const optionSets = {
-        video: [
-            { value: 'very_high', name: 'Premium / Max', desc: 'Best available quality', badge: '4K' },
-            { value: 'high', name: 'High (1080p)', desc: 'Full HD — recommended', badge: 'HD' },
-            { value: 'medium', name: 'Standard (720p)', desc: 'Balanced quality & size', badge: 'SD' },
-            { value: 'low', name: 'Basic (480p)', desc: 'Smallest file size', badge: 'LQ' },
-        ],
-        audio: [
-            { value: 'very_high', name: 'Premium / Max', desc: '320 kbps — highest quality', badge: 'HI' },
-            { value: 'high', name: 'High (192 kbps)', desc: 'Excellent audio fidelity', badge: '192' },
-            { value: 'medium', name: 'Standard (128 kbps)', desc: 'Great everyday quality', badge: '128' },
-            { value: 'low', name: 'Basic (64 kbps)', desc: 'Smallest file size', badge: '64' },
-        ],
+        postDownloadView: document.getElementById('post-download-view'),
+        statusTitle: document.getElementById('status-title'),
+        resetBtn: document.getElementById('reset-btn')
     };
 
-    let selectedValue = 'high';
+    // State
+    const state = {
+        currentUrl: '',
+        type: 'video', // 'video' | 'audio'
+        quality: 'high'
+    };
 
-    function updateCustomOptions(type) {
-        const set = optionSets[type];
-        csOptions.forEach((opt, i) => {
-            const data = set[i];
-            opt.dataset.value = data.value;
-            opt.querySelector('.cs-opt-badge').textContent = data.badge;
-            opt.querySelector('.cs-opt-name').textContent = data.name;
-            opt.querySelector('.cs-opt-desc').textContent = data.desc;
-            qualitySelect.options[i].text = data.name;
-            qualitySelect.options[i].value = data.value;
+    // Quality Configuration
+    const qualityOptions = {
+        video: [
+            { value: 'very_high', name: 'Premium (Max)', desc: 'Highest available quality', badge: '4K' },
+            { value: 'high', name: 'High (1080p)', desc: 'Standard Full HD', badge: 'HD' },
+            { value: 'medium', name: 'Medium (720p)', desc: 'Good balance of quality/size', badge: 'SD' },
+            { value: 'low', name: 'Low (480p)', desc: 'Smaller file size', badge: 'LQ' }
+        ],
+        audio: [
+            { value: 'very_high', name: 'Lossless / Max', desc: 'Highest bitrate available', badge: '320k' },
+            { value: 'high', name: 'High (192kbps)', desc: 'Great audio quality', badge: '192k' },
+            { value: 'medium', name: 'Standard (128kbps)', desc: 'Good for most uses', badge: '128k' },
+            { value: 'low', name: 'Basic (64kbps)', desc: 'Smallest audio size', badge: '64k' }
+        ]
+    };
+
+    // Initialize Dropdown Options
+    function renderDropdownOptions() {
+        const options = qualityOptions[state.type];
+        elements.dropdownMenu.innerHTML = options.map(opt => `
+            <div class="dropdown-item ${opt.value === state.quality ? 'selected' : ''}" data-value="${opt.value}">
+                <div class="item-info">
+                    <span class="item-name">${opt.name}</span>
+                    <span class="item-desc">${opt.desc}</span>
+                </div>
+                <div class="item-badge">${opt.badge}</div>
+            </div>
+        `).join('');
+
+        // Attach listeners to new items
+        document.querySelectorAll('.dropdown-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                state.quality = item.dataset.value;
+                elements.dropdownValueText.textContent = item.querySelector('.item-name').textContent;
+                renderDropdownOptions(); // Re-render to update 'selected' class
+                elements.dropdown.classList.remove('open');
+            });
         });
-        // Re-select whichever index was previously selected
-        const idx = [...csOptions].findIndex(o => o.dataset.value === selectedValue);
-        selectOption(csOptions[idx >= 0 ? idx : 1], false);
+
+        // Ensure the current selected text matches default/fallback
+        const selectedOpt = options.find(o => o.value === state.quality) || options[1];
+        state.quality = selectedOpt.value;
+        elements.dropdownValueText.textContent = selectedOpt.name;
     }
 
-    function selectOption(optEl, closeDrawer = true) {
-        csOptions.forEach(o => o.classList.remove('selected'));
-        optEl.classList.add('selected');
-        selectedValue = optEl.dataset.value;
-        qualitySelect.value = selectedValue;
-        csValueEl.textContent = optEl.querySelector('.cs-opt-name').textContent;
-        if (closeDrawer) customSelect.classList.remove('open');
-    }
-
-    csTrigger.addEventListener('click', (e) => {
+    // Toggle Dropdown
+    elements.dropdownTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
-        customSelect.classList.toggle('open');
+        elements.dropdown.classList.toggle('open');
     });
 
-    csOptions.forEach(opt => {
-        opt.addEventListener('click', () => selectOption(opt));
-    });
-
+    // Close Dropdown on outside click
     document.addEventListener('click', (e) => {
-        if (!customSelect.contains(e.target)) customSelect.classList.remove('open');
+        if (!elements.dropdown.contains(e.target)) {
+            elements.dropdown.classList.remove('open');
+        }
     });
 
-    // ── Video / Audio toggle ─────────────────────────────────────
-    [btnVideo, btnAudio].forEach((btn, index) => {
+    // Segmented Controller (Video/Audio Toggle)
+    elements.segmentBtns.forEach((btn, index) => {
         btn.addEventListener('click', () => {
-            btnVideo.classList.remove('active');
-            btnAudio.classList.remove('active');
+            // Update UI 
+            elements.segmentBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            elements.segmentBg.style.transform = `translateX(${index * 100}%)`;
 
-            toggleSlider.classList.remove('hidden');
-            toggleSlider.style.transform = `translateX(${index * 100}%)`;
-
-            currentType = btn.dataset.type;
-            updateCustomOptions(currentType);
+            // Update State
+            state.type = btn.dataset.type;
+            renderDropdownOptions();
         });
     });
 
-    // Initialise slider
-    if (btnVideo.classList.contains('active')) {
-        toggleSlider.classList.remove('hidden');
-        toggleSlider.style.transform = 'translateX(0%)';
-    }
-
-    let currentUrl = '';
-
-    // ── Fetch media info ─────────────────────────────────────────
-    fetchForm.addEventListener('submit', async (e) => {
+    // Step 1 -> Step 2: Fetch Media Information
+    elements.form.addEventListener('submit', async (e) => {
         e.preventDefault();
-
-        const url = linkInput.value.trim();
+        const url = elements.input.value.trim();
         if (!url) return;
 
-        currentUrl = url;
-        errorMsg.classList.add('hidden');
-        errorMsg.textContent = '';
-        resultView.classList.add('hidden');
-        document.getElementById('download-status').classList.add('hidden');
+        state.currentUrl = url;
 
-        fetchBtn.disabled = true;
-        fetchSpinner.style.display = 'block';
-        btnText.textContent = '';
+        // Reset Error state
+        elements.errorMsg.classList.add('hidden');
+
+        // Loading State
+        elements.fetchBtn.disabled = true;
+        elements.fetchSpinner.classList.remove('hidden');
+        elements.fetchBtnText.textContent = 'Processing...';
 
         try {
             const res = await fetch('/api/info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({ url })
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to fetch info');
+            if (!res.ok) throw new Error(data.error || 'Failed to fetch media information.');
 
-            const extractor = data.extractor || 'unknown';
-            thumbImg.src = data.thumbnail || 'https://via.placeholder.com/90?text=None';
-            titleEl.textContent = data.title;
-            sourceEl.textContent = extractor;
+            // Populate UI with data
+            elements.mediaThumb.src = data.thumbnail || 'https://via.placeholder.com/150?text=No+Thumb';
+            elements.mediaTitle.textContent = data.title;
+            elements.mediaSource.textContent = data.extractor || 'Link';
 
             if (data.duration) {
-                const mins = Math.floor(data.duration / 60);
-                const secs = data.duration % 60;
-                durationEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-                durationEl.style.display = 'block';
+                const m = Math.floor(data.duration / 60);
+                const s = data.duration % 60;
+                elements.mediaDuration.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+                elements.mediaDuration.classList.remove('hidden');
             } else {
-                durationEl.style.display = 'none';
+                elements.mediaDuration.classList.add('hidden');
             }
 
-            const isAudioPlatform = extractor.toLowerCase().includes('soundcloud');
-            (isAudioPlatform ? btnAudio : btnVideo).click();
+            // Auto-fallback to audio if soundcloud
+            const isAudioOnly = (data.extractor || '').toLowerCase().includes('soundcloud');
+            if (isAudioOnly && state.type !== 'audio') {
+                elements.segmentBtns[1].click();
+            }
 
-            resultView.classList.remove('hidden');
+            // UI Flow Action: Hide form, reveal populated results and options
+            elements.formContainer.classList.add('hidden');
+            elements.resultView.classList.remove('hidden');
+            elements.optionsView.classList.remove('hidden');
+            elements.postDownloadView.classList.add('hidden');
 
         } catch (err) {
-            errorMsg.textContent = err.message || 'An unexpected error occurred.';
-            errorMsg.classList.remove('hidden');
+            elements.errorMsg.textContent = err.message;
+            elements.errorMsg.classList.remove('hidden');
         } finally {
-            fetchBtn.disabled = false;
-            fetchSpinner.style.display = 'none';
-            btnText.textContent = 'Proceed';
+            elements.fetchBtn.disabled = false;
+            elements.fetchSpinner.classList.add('hidden');
+            elements.fetchBtnText.textContent = 'Next';
         }
     });
 
-    // ── Download ─────────────────────────────────────────────────
-    document.getElementById('download-btn').addEventListener('click', () => {
-        const params = new URLSearchParams({ url: currentUrl, type: currentType, quality: selectedValue });
+    // Step 2 -> Step 3: Action Download Flow
+    elements.downloadBtn.addEventListener('click', () => {
+        if (!state.currentUrl) return;
+
+        const params = new URLSearchParams({
+            url: state.currentUrl,
+            type: state.type,
+            quality: state.quality
+        });
+
+        // Trigger file download via browser native behavior
         window.location.href = `/api/download?${params.toString()}`;
 
-        const statusEl = document.getElementById('download-status');
-        statusEl.classList.remove('hidden');
-        setTimeout(() => statusEl.classList.add('hidden'), 8000);
+        // UI Flow Action: Hide options layout, swap in post-download status
+        elements.optionsView.classList.add('hidden');
+        elements.postDownloadView.classList.remove('hidden');
+
+        // Clip title length gracefully for status text
+        let shortTitle = elements.mediaTitle.textContent;
+        if (shortTitle.length > 35) shortTitle = shortTitle.substring(0, 35) + '...';
+        elements.statusTitle.textContent = shortTitle;
     });
+
+    // Step 3 -> Return to Step 1: Process Another Link
+    elements.resetBtn.addEventListener('click', () => {
+        state.currentUrl = '';
+        elements.input.value = '';
+
+        // Revert UI to initial layout
+        elements.resultView.classList.add('hidden');
+        elements.postDownloadView.classList.add('hidden');
+        elements.optionsView.classList.remove('hidden'); // ready for next request
+        elements.formContainer.classList.remove('hidden');
+
+        elements.input.focus();
+    });
+
+    // Initial setup
+    renderDropdownOptions();
 });
